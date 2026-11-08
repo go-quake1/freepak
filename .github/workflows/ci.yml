@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fetch the pinned LibreQuake archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v0.09-beta -R lavenderdotpet/LibreQuake -p lite.zip -D "$RUNNER_TEMP"
+      - name: Test (reproducibility, origins, engine loading; the reference gates run locally)
+        env:
+          FREEPAK_REQUIRE: "1"
+        run: FREEPAK_LQ="$RUNNER_TEMP/lite.zip" go test -count=1 ./...
+      - name: Vet
+        run: go vet ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
