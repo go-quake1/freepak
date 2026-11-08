@@ -237,15 +237,22 @@ func TestGatePlantedPositive(t *testing.T) {
 func TestGateException(t *testing.T) {
 	pal := noise(30, 768)
 	ref := []File{{"gfx/palette.lmp", pal}, {"other.lmp", pal[:100]}}
-	rep, err := CheckNoReferenceBytes([]File{{"gfx/palette.lmp", pal}}, ref, "x")
-	if err != nil || len(rep.Excepted) != 1 {
-		t.Fatalf("palette: %+v %v", rep, err)
-	}
-	if _, err := CheckNoReferenceBytes([]File{{"gfx/other.lmp", pal}}, ref, "x"); err == nil {
-		t.Error("palette bytes under another name accepted")
+	// There is no exception any more: an identical palette is refused like any entry.
+	if _, err := CheckNoReferenceBytes([]File{{"gfx/palette.lmp", pal}}, ref, "x"); err == nil {
+		t.Error("identical palette accepted")
 	}
 	if _, err := CheckNoReferenceBytes([]File{{"other.lmp", pal[:100]}}, ref, "x"); err == nil {
-		t.Error("identical non-excepted entry accepted")
+		t.Error("identical entry accepted")
+	}
+	own := OwnPalette()
+	if n, err := CheckPalette([]File{{"gfx/palette.lmp", own}}, ref); err != nil || n > MaxSamePaletteColours {
+		t.Errorf("own palette against noise: %d %v", n, err)
+	}
+	if _, err := CheckPalette([]File{{"gfx/palette.lmp", pal}}, ref); err == nil {
+		t.Error("CheckPalette accepted the identical palette")
+	}
+	if _, err := CheckPalette(nil, ref); err == nil {
+		t.Error("CheckPalette accepted a missing palette")
 	}
 }
 
@@ -321,7 +328,7 @@ func TestBuildFromLibreQuake(t *testing.T) {
 			gpl++
 		}
 	}
-	if gen != 2 || gpl != 1 || lq != 337 {
+	if gen != 4 || gpl != 1 || lq != 335 {
 		t.Errorf("origins: %d generated, %d librequake, %d GPL", gen, lq, gpl)
 	}
 	if a.Engine.MapsLoaded != 8 || !a.Engine.ProgsLoads || a.Engine.Views == 0 {
@@ -329,6 +336,36 @@ func TestBuildFromLibreQuake(t *testing.T) {
 	}
 	if !bytes.Contains(a.Manifest, []byte("NOT RUN")) {
 		t.Error("manifest does not stamp the missing reference gates")
+	}
+	if bytes.Contains(a.Manifest, []byte("EXCEPTION")) {
+		t.Error("manifest carries an exception")
+	}
+	// Quantisation report: the reindexing error over all texels.
+	if a.Quant.Texels < 1e6 || a.Quant.Mean > 4 || a.Quant.Max > 30 {
+		t.Errorf("quantisation: %+v", a.Quant)
+	}
+	t.Logf("quantisation: %+v", a.Quant)
+	// The palette is ours and the colormap has all 16385 bytes.
+	for _, f := range files {
+		switch f.Name {
+		case "gfx/palette.lmp":
+			if !bytes.Equal(f.Data, OwnPalette()) {
+				t.Error("palette.lmp is not OwnPalette")
+			}
+		case "gfx/colormap.lmp":
+			if len(f.Data) != 16385 || !bytes.Equal(f.Data, Colormap(OwnPalette())) {
+				t.Errorf("colormap.lmp: %d bytes", len(f.Data))
+			}
+		}
+	}
+	// Cross-architecture pin: the pak that was released from this source is the
+	// one this machine builds (floating point must not leak into the bytes).
+	want, err := os.ReadFile("PAK0.SHA256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.PakSHA256; strings.TrimSpace(string(want)) != got {
+		t.Errorf("pak0.pak sha256 %s, PAK0.SHA256 says %s", got, strings.TrimSpace(string(want)))
 	}
 }
 

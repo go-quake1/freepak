@@ -1,6 +1,7 @@
 package freepak
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"slices"
@@ -42,24 +43,48 @@ func rollingHashes(b []byte, fn func(off int, h uint64)) {
 	}
 }
 
-// FunctionalExceptions are the entries that may equal the reference's because
-// no other bytes would work, each with the reason. The gate stamps them in the
-// MANIFEST; it accepts nothing else.
-var FunctionalExceptions = map[string]string{
-	"gfx/palette.lmp": "the 256-colour palette: 768 bytes of RGB values that every Quake asset (textures, models, sprites, pictures, colormap) is indexed against, " +
-		"and that LibreQuake itself ships; a different palette would recolour every asset",
+// MaxSamePaletteColours is how many of the 256 palette entries may equal the
+// reference's by value (the output palette is generated from its own
+// parameters; pure black and white may coincide).
+const MaxSamePaletteColours = 4
+
+// CheckPalette fails if the output palette is the reference's or shares more
+// than MaxSamePaletteColours entries with it; it returns the number shared.
+func CheckPalette(out, ref []File) (int, error) {
+	find := func(fs []File) []byte {
+		for _, f := range fs {
+			if f.Name == "gfx/palette.lmp" {
+				return f.Data
+			}
+		}
+		return nil
+	}
+	o, r := find(out), find(ref)
+	if len(o) != 768 || len(r) != 768 {
+		return 0, fmt.Errorf("palette.lmp has %d bytes in the output and %d in the reference, want 768", len(o), len(r))
+	}
+	same := 0
+	for i := 0; i < 256; i++ {
+		if bytes.Equal(o[i*3:i*3+3], r[i*3:i*3+3]) {
+			same++
+		}
+	}
+	if same > MaxSamePaletteColours {
+		return same, fmt.Errorf("palette.lmp shares %d of 256 colours with the reference (at most %d allowed)", same, MaxSamePaletteColours)
+	}
+	return same, nil
 }
 
 // RefReport is what the no-id-bytes gate measured.
 type RefReport struct {
-	RefEntries int    // entries of the reference pak
-	RefSHA256  string // of the reference pak file, as given
-	RefWindows int    // 4 KiB windows hashed from the reference (never stored in output)
-	OutEntries int
-	OutWindows int      // windows scanned in the output
-	SameSHA    int      // output entries whose sha256 equals a reference entry's and are not excepted
-	Excepted   []string // identical entries that FunctionalExceptions allows, by path
-	WindowHits int      // output windows whose hash equals a reference window's
+	RefEntries  int    // entries of the reference pak
+	RefSHA256   string // of the reference pak file, as given
+	RefWindows  int    // 4 KiB windows hashed from the reference (never stored in output)
+	OutEntries  int
+	OutWindows  int // windows scanned in the output
+	SameSHA     int // output entries whose sha256 equals a reference entry's
+	WindowHits  int // output windows whose hash equals a reference window's
+	SameColours int // palette entries equal to the reference's by value (CheckPalette)
 }
 
 // CheckNoReferenceBytes is the gate that no byte run of the reference pak is in
@@ -81,12 +106,8 @@ func CheckNoReferenceBytes(out, ref []File, refSHA string) (RefReport, error) {
 	var bad []string
 	for _, f := range out {
 		if name, ok := refSums[sha256.Sum256(f.Data)]; ok {
-			if _, excepted := FunctionalExceptions[f.Name]; excepted && name == f.Name {
-				r.Excepted = append(r.Excepted, f.Name)
-			} else {
-				r.SameSHA++
-				bad = append(bad, fmt.Sprintf("%s is byte-identical to reference %s", f.Name, name))
-			}
+			r.SameSHA++
+			bad = append(bad, fmt.Sprintf("%s is byte-identical to reference %s", f.Name, name))
 		}
 		rollingHashes(f.Data, func(off int, h uint64) {
 			r.OutWindows++

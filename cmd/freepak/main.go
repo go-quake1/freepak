@@ -29,7 +29,7 @@ func RootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(buildCmd(), mapsCmd(), layoutCmd())
+	root.AddCommand(buildCmd(), mapsCmd(), layoutCmd(), structureCmd())
 	return root
 }
 
@@ -88,6 +88,34 @@ it is in the output; its content is never written. Without it, say
 	f.StringVar(&opt.OutDir, "out", "", "output directory")
 	_ = c.MarkFlagRequired("librequake")
 	_ = c.MarkFlagRequired("out")
+	return c
+}
+
+func structureCmd() *cobra.Command {
+	var ref string
+	c := &cobra.Command{
+		Use:   "structure --reference <id pak0>",
+		Short: "Print the palette and colormap structure of a reference pak (no colour values)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			raw, err := os.ReadFile(ref)
+			if err != nil {
+				return err
+			}
+			files, err := freepak.ReadPak(raw)
+			if err != nil {
+				return err
+			}
+			s, err := freepak.StructureReport(files)
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(cmd.OutOrStdout(), s)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&ref, "reference", "", "path to id's pak0.pak")
+	_ = c.MarkFlagRequired("reference")
 	return c
 }
 
