@@ -1,9 +1,9 @@
 module github.com/go-quake1/freepak
 
-go 1.27.3
+go 1.27.4
 
 require (
-	github.com/go-quake1/engine v0.10.0
+	github.com/go-quake1/engine v0.15.0
 	github.com/spf13/cobra v1.10.2
 )
 
