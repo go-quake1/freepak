@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -205,6 +206,17 @@ func Assemble(lq *LibreQuake) (_ []File, _ []Entry, q Quantisation, err error) {
 			lic = LicGPL2
 		}
 		origin := "librequake:" + name
+		if slices.Contains(LoopingSounds, name) {
+			// The game loops these (see LoopingSounds): a sample without a
+			// loop point plays once. LibreQuake's water1.wav has none.
+			out, added, err := EnsureLoop(data)
+			if err != nil {
+				return nil, nil, q, fmt.Errorf("%s: %w", name, err)
+			}
+			if added {
+				data, origin = out, origin+"+cue"
+			}
+		}
 		if strings.HasPrefix(name, "maps/") && strings.HasSuffix(name, ".bsp") {
 			out, n, err := RenameChangelevels(data, rename)
 			if err != nil {
