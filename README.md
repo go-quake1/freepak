@@ -41,6 +41,21 @@ regenerates `layout.txt` (paths and sizes only).
 | `maps/e1m1.bsp` ... `e1m8.bsp` | LibreQuake `lq_e0m1` ... `lq_e0m8`, same number |
 | `end1.bin` | generated: an 80x25 text screen written for this project |
 | `sound/player/slimbrn2.wav` | generated: synthesised by integer code (bubbles over low-passed noise), not sampled |
+| `sound/ambience/water1.wav` | the LibreQuake entry, plus a `cue ` chunk (loop start 0): LibreQuake's has none, and the game plays a sample with no loop point once (`MANIFEST` marks it `+cue`) |
+
+## Looping sounds
+
+tyrquake loops a channel only when its sample has a loop point (`snd_mix.c`
+`S_PaintChannels`: at the end of its data a channel with `looping && loopstart >= 0`
+restarts at `loopstart`, otherwise it ends; `snd_dma.c` `S_StaticSound` refuses a static
+sound with `loopstart == -1`). `LoopingSounds` lists what must loop: the two ambient
+channels of `S_Init`, `ambience/water1.wav` and `ambience/wind2.wav`, and what the
+`ambient_comp_hum`, `ambient_drip`, `ambient_drone` and torch entities of the pak's maps
+play (`comp1`, `drip1`, `drone6`, `fire1`). Of these only `water1.wav` had no cue point in
+LibreQuake v0.09-beta, so without the fix every level went quiet after its first seconds of
+water; the build now adds one (`EnsureLoop`), and `TestLoopingSoundsHaveCuePoints` fails
+if any of them lacks it. `ambience/thunder1.wav` and `windfly.wav` have none either and no
+map of this pak starts them as static sounds.
 
 LibreQuake's lite set is a single episode: a hub (`maps/start.bsp`) leads to
 `lq_e0m1`, which chains to `m2`, `m3`, `m4`, `m5`; `m5` leads to `m6` and to the
