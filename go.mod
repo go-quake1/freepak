@@ -3,7 +3,7 @@ module github.com/go-quake1/freepak
 go 1.27.4
 
 require (
-	github.com/go-quake1/engine v0.47.0
+	github.com/go-quake1/engine v0.49.0
 	github.com/spf13/cobra v1.10.2
 )
 
